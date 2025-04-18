@@ -19,6 +19,28 @@ interface CartItem {
   }[];
 }
 
+interface OrderData {
+  items: {
+    id: string;
+    name: string;
+    price: number;
+    quantity: number;
+    selectedOptions?: {
+      name: string;
+      price: number;
+    }[];
+  }[];
+  tableNumber: string;
+  totalAmount: number;
+  status: 'pending' | 'preparing' | 'completed';
+  paymentStatus: 'paid' | 'unpaid';
+  paymentMethod: string;
+  timestamp: any;
+  createdAt: string;
+  userIP: string;
+  deviceId: string;
+}
+
 const Cart: React.FC = () => {
   const navigate = useNavigate();
   const { items, removeItem, updateQuantity, clearCart } = useCart();
@@ -29,22 +51,6 @@ const Cart: React.FC = () => {
   const [error, setError] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<string>('Cash');
-
-  // Get user's IP address
-  useEffect(() => {
-    const getIP = async () => {
-      try {
-        const response = await fetch('https://api.ipify.org?format=json');
-        const data = await response.json();
-        setUserIP(data.ip);
-      } catch (error) {
-        console.error('Error fetching IP:', error);
-        setError('Failed to get your IP address. Please try refreshing the page.');
-      }
-    };
-
-    getIP();
-  }, []);
 
   const calculateItemTotal = (item: CartItem) => {
     const baseTotal = item.price * item.quantity;
@@ -86,7 +92,7 @@ const Cart: React.FC = () => {
     try {
       console.log('Preparing order data with items:', items); // Debug log
       
-      const orderData = {
+      const orderData: OrderData = {
         items: items.map(item => ({
           id: item.id,
           name: item.name,
