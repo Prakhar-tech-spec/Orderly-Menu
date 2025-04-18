@@ -79,6 +79,7 @@ const Cart: React.FC = () => {
         tableNumber: inputTableNumber,
         totalAmount: calculateTotal(),
         status: 'pending',
+        paymentStatus: 'unpaid',
         paymentMethod: 'Cash',
         timestamp: serverTimestamp(),
         createdAt: new Date().toISOString()
