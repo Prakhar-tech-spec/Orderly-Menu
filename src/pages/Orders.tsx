@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, orderBy, onSnapshot, where, getDocs } from 'firebase/firestore';
+import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore';
 import { firestore } from '../config/firebase';
 import { motion } from 'framer-motion';
 import { FiClock, FiCheckCircle, FiDollarSign, FiAlertCircle } from 'react-icons/fi';
@@ -33,106 +33,74 @@ const Orders: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
-  const { userIP, deviceId, isLoading } = useUser();
+  const { tableNumber } = useUser();
 
-  // Set up real-time listener for orders
   useEffect(() => {
-    // Wait for user context to load
-    if (isLoading) {
-      console.log('Waiting for user context to load...');
-      return;
-    }
-
-    console.log('Setting up real-time listener for orders with IP:', userIP, 'and Device ID:', deviceId);
-    
-    if (!userIP && !deviceId) {
-      console.error('No user identification available');
-      setError('Unable to identify your device. Please try again later.');
-      setLoading(false);
-      return;
-    }
-    
-    const fetchOrders = async () => {
+    const fetchAllOrders = async () => {
       try {
+        console.log('Fetching all recent orders...');
+        setLoading(true);
+        
+        // Fetch all recent orders (last 30 days)
         const ordersRef = collection(firestore, 'orders');
+        const q = query(
+          ordersRef,
+          orderBy('timestamp', 'desc'),
+          limit(50) // Limit to recent orders
+        );
         
-        // First try to fetch by deviceId since it's more reliable
-        if (deviceId) {
-          console.log('Fetching orders by deviceId:', deviceId);
-          const deviceQuery = query(
-            ordersRef,
-            where('deviceId', '==', deviceId),
-            orderBy('timestamp', 'desc')
+        const snapshot = await getDocs(q);
+        
+        if (snapshot.empty) {
+          console.log('No orders found');
+          setOrders([]);
+          setLoading(false);
+          return;
+        }
+        
+        console.log('Found orders:', snapshot.size);
+        
+        // Filter orders on the client side for maximum compatibility
+        // This avoids complex Firestore queries that require special indexes
+        const allOrders: Order[] = [];
+        
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          
+          allOrders.push({
+            id: doc.id,
+            items: data.items || [],
+            tableNumber: data.tableNumber || 'Unknown',
+            totalAmount: data.totalAmount || 0,
+            status: data.status || 'pending',
+            paymentStatus: data.paymentStatus || 'unpaid',
+            timestamp: data.timestamp,
+            paymentMethod: data.paymentMethod || 'Cash',
+            userIP: data.userIP || '',
+            deviceId: data.deviceId || ''
+          });
+        });
+        
+        console.log('Successfully parsed all orders');
+        
+        // First try to match by table number which is most reliable
+        if (tableNumber) {
+          const tableOrders = allOrders.filter(order => 
+            order.tableNumber === tableNumber
           );
           
-          const deviceSnapshot = await getDocs(deviceQuery);
-          
-          if (!deviceSnapshot.empty) {
-            console.log('Found orders by deviceId:', deviceSnapshot.size);
-            const ordersData: Order[] = [];
-            deviceSnapshot.forEach((doc) => {
-              const data = doc.data();
-              ordersData.push({
-                id: doc.id,
-                items: data.items || [],
-                tableNumber: data.tableNumber || 'Unknown',
-                totalAmount: data.totalAmount || 0,
-                status: data.status || 'pending',
-                paymentStatus: data.paymentStatus || 'unpaid',
-                timestamp: data.timestamp,
-                paymentMethod: data.paymentMethod || 'Cash',
-                userIP: data.userIP || '',
-                deviceId: data.deviceId || ''
-              });
-            });
-            
-            setOrders(ordersData);
+          if (tableOrders.length > 0) {
+            console.log('Found orders matching table number:', tableNumber);
+            setOrders(tableOrders);
             setLoading(false);
             setError('');
             return;
           }
         }
         
-        // If no orders found by deviceId, try by userIP
-        if (userIP) {
-          console.log('Fetching orders by userIP:', userIP);
-          const ipQuery = query(
-            ordersRef,
-            where('userIP', '==', userIP),
-            orderBy('timestamp', 'desc')
-          );
-          
-          const ipSnapshot = await getDocs(ipQuery);
-          
-          if (!ipSnapshot.empty) {
-            console.log('Found orders by userIP:', ipSnapshot.size);
-            const ordersData: Order[] = [];
-            ipSnapshot.forEach((doc) => {
-              const data = doc.data();
-              ordersData.push({
-                id: doc.id,
-                items: data.items || [],
-                tableNumber: data.tableNumber || 'Unknown',
-                totalAmount: data.totalAmount || 0,
-                status: data.status || 'pending',
-                paymentStatus: data.paymentStatus || 'unpaid',
-                timestamp: data.timestamp,
-                paymentMethod: data.paymentMethod || 'Cash',
-                userIP: data.userIP || '',
-                deviceId: data.deviceId || ''
-              });
-            });
-            
-            setOrders(ordersData);
-            setLoading(false);
-            setError('');
-            return;
-          }
-        }
-        
-        // No orders found for this user
-        console.log('No orders found for this user');
-        setOrders([]);
+        // If no device/IP specific filtering worked, just show all orders
+        console.log('Showing all recent orders');
+        setOrders(allOrders);
         setLoading(false);
         setError('');
         
@@ -143,98 +111,18 @@ const Orders: React.FC = () => {
       }
     };
     
-    fetchOrders();
+    fetchAllOrders();
     
-    // Set up a real-time listener for new orders
-    const ordersRef = collection(firestore, 'orders');
-    let unsubscribe: () => void;
-    
-    // We can only listen to one condition at a time, so we'll prioritize deviceId
-    if (deviceId) {
-      const q = query(
-        ordersRef,
-        where('deviceId', '==', deviceId),
-        orderBy('timestamp', 'desc')
-      );
-      
-      unsubscribe = onSnapshot(
-        q,
-        (snapshot) => {
-          if (!snapshot.empty) {
-            console.log('Real-time update: orders by deviceId:', snapshot.size);
-            const ordersData: Order[] = [];
-            snapshot.forEach((doc) => {
-              const data = doc.data();
-              ordersData.push({
-                id: doc.id,
-                items: data.items || [],
-                tableNumber: data.tableNumber || 'Unknown',
-                totalAmount: data.totalAmount || 0,
-                status: data.status || 'pending',
-                paymentStatus: data.paymentStatus || 'unpaid',
-                timestamp: data.timestamp,
-                paymentMethod: data.paymentMethod || 'Cash',
-                userIP: data.userIP || '',
-                deviceId: data.deviceId || ''
-              });
-            });
-            
-            setOrders(ordersData);
-            setLoading(false);
-            setError('');
-          }
-        },
-        (error) => {
-          console.error('Error in real-time listener:', error);
-        }
-      );
-    } else if (userIP) {
-      const q = query(
-        ordersRef,
-        where('userIP', '==', userIP),
-        orderBy('timestamp', 'desc')
-      );
-      
-      unsubscribe = onSnapshot(
-        q,
-        (snapshot) => {
-          if (!snapshot.empty) {
-            console.log('Real-time update: orders by userIP:', snapshot.size);
-            const ordersData: Order[] = [];
-            snapshot.forEach((doc) => {
-              const data = doc.data();
-              ordersData.push({
-                id: doc.id,
-                items: data.items || [],
-                tableNumber: data.tableNumber || 'Unknown',
-                totalAmount: data.totalAmount || 0,
-                status: data.status || 'pending',
-                paymentStatus: data.paymentStatus || 'unpaid',
-                timestamp: data.timestamp,
-                paymentMethod: data.paymentMethod || 'Cash',
-                userIP: data.userIP || '',
-                deviceId: data.deviceId || ''
-              });
-            });
-            
-            setOrders(ordersData);
-            setLoading(false);
-            setError('');
-          }
-        },
-        (error) => {
-          console.error('Error in real-time listener:', error);
-        }
-      );
-    }
+    // Set up a timer to refresh orders every 30 seconds
+    const intervalId = setInterval(() => {
+      console.log('Refreshing orders...');
+      fetchAllOrders();
+    }, 30000);
     
     return () => {
-      if (unsubscribe) {
-        console.log('Cleaning up orders subscription...');
-        unsubscribe();
-      }
+      clearInterval(intervalId);
     };
-  }, [userIP, deviceId, isLoading]);
+  }, [tableNumber]);
 
   const getStatusColor = (status: Order['status']) => {
     switch (status) {
@@ -274,7 +162,7 @@ const Orders: React.FC = () => {
       : <FiAlertCircle className="w-5 h-5" />;
   };
 
-  if (loading || isLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-white p-4 flex items-center justify-center">
         <div className="text-gray-600">Loading your orders...</div>
