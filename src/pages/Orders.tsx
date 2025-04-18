@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, orderBy, onSnapshot, where, Timestamp } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, where } from 'firebase/firestore';
 import { firestore } from '../config/firebase';
 import { motion } from 'framer-motion';
-import { FiClock, FiCheckCircle } from 'react-icons/fi';
-import { useUser } from '../context/UserContext';
+import { FiClock, FiCheckCircle, FiDollarSign, FiAlertCircle } from 'react-icons/fi';
 
 interface OrderItem {
   id: string;
@@ -25,60 +24,84 @@ interface Order {
   paymentStatus: 'paid' | 'unpaid';
   timestamp: any;
   paymentMethod: string;
-  userIP?: string;
-  deviceId?: string;
+  userIP: string;
 }
 
 const Orders: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const { userIP, deviceId } = useUser();
+  const [error, setError] = useState<string>('');
+  const [userIP, setUserIP] = useState<string>('');
 
+  // Get user's IP address
   useEffect(() => {
-    if (!userIP && !deviceId) {
-      // Still loading user info
+    const getIP = async () => {
+      try {
+        const response = await fetch('https://api.ipify.org?format=json');
+        const data = await response.json();
+        setUserIP(data.ip);
+      } catch (error) {
+        console.error('Error fetching IP:', error);
+        setError('Failed to load orders. Please try refreshing the page.');
+        setLoading(false);
+      }
+    };
+
+    getIP();
+  }, []);
+
+  // Set up real-time listener for orders
+  useEffect(() => {
+    if (!userIP) {
       return;
     }
 
-    console.log('Fetching orders for user IP:', userIP, 'and device ID:', deviceId);
+    console.log('Setting up real-time listener for orders with IP:', userIP);
     
-    // Create a query to filter orders by this user's identifiers
     const ordersRef = collection(firestore, 'orders');
     const q = query(
       ordersRef,
-      // Use OR condition to match either userIP or deviceId
-      where('userIP', '==', userIP || 'unknown'), 
+      where('userIP', '==', userIP),
       orderBy('timestamp', 'desc')
     );
     
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const ordersData: Order[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        
-        // Optional: second check to ensure we only include this user's orders
-        // (only necessary if query can't do OR condition between userIP and deviceId)
-        if (
-          (data.userIP === userIP || data.deviceId === deviceId) ||
-          (data.tableNumber === localStorage.getItem('tableNumber'))
-        ) {
+    const unsubscribe = onSnapshot(q, 
+      (snapshot) => {
+        console.log('Received snapshot with', snapshot.size, 'orders');
+        const ordersData: Order[] = [];
+        snapshot.forEach((doc) => {
+          const data = doc.data();
+          console.log('Processing order:', doc.id, data);
+          
           ordersData.push({
             id: doc.id,
-            ...data,
-            timestamp: data.timestamp instanceof Timestamp ? 
-              data.timestamp.toDate() : 
-              new Date(data.createdAt || Date.now())
-          } as Order);
-        }
-      });
-      
-      console.log('Found orders for current user:', ordersData.length);
-      setOrders(ordersData);
-      setLoading(false);
-    });
+            items: data.items || [],
+            tableNumber: data.tableNumber || 'Unknown',
+            totalAmount: data.totalAmount || 0,
+            status: data.status || 'pending',
+            paymentStatus: data.paymentStatus || 'unpaid',
+            timestamp: data.timestamp,
+            paymentMethod: data.paymentMethod || 'Cash',
+            userIP: data.userIP || ''
+          });
+        });
+        console.log('Setting orders state with', ordersData.length, 'orders');
+        setOrders(ordersData);
+        setLoading(false);
+        setError('');
+      },
+      (error) => {
+        console.error('Error in real-time listener:', error);
+        setError('Failed to load orders. Please try refreshing the page.');
+        setLoading(false);
+      }
+    );
 
-    return () => unsubscribe();
-  }, [userIP, deviceId]);
+    return () => {
+      console.log('Cleaning up orders subscription...');
+      unsubscribe();
+    };
+  }, [userIP]);
 
   const getStatusColor = (status: Order['status']) => {
     switch (status) {
@@ -91,6 +114,12 @@ const Orders: React.FC = () => {
       default:
         return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  const getPaymentStatusColor = (status: Order['paymentStatus']) => {
+    return status === 'paid' 
+      ? 'bg-green-100 text-green-800' 
+      : 'bg-red-100 text-red-800';
   };
 
   const getStatusIcon = (status: Order['status']) => {
@@ -106,29 +135,37 @@ const Orders: React.FC = () => {
     }
   };
 
-  const getPaymentStatusColor = (status: Order['paymentStatus']) => {
+  const getPaymentStatusIcon = (status: Order['paymentStatus']) => {
     return status === 'paid' 
-      ? 'bg-green-100 text-green-800' 
-      : 'bg-red-100 text-red-800';
+      ? <FiDollarSign className="w-5 h-5" /> 
+      : <FiAlertCircle className="w-5 h-5" />;
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 p-4 flex items-center justify-center">
+      <div className="min-h-screen bg-white p-4 flex items-center justify-center">
         <div className="text-gray-600">Loading your orders...</div>
       </div>
     );
   }
 
+  if (error) {
+    return (
+      <div className="min-h-screen bg-white p-4 flex items-center justify-center">
+        <div className="text-red-600">{error}</div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50 p-4 pb-24">
-      <div className="max-w-[480px] mx-auto">
-        <h1 className="text-2xl font-bold mb-6 text-gray-800">Your Orders</h1>
-        
+    <div className="min-h-screen bg-white">
+      <div className="p-4 border-b">
+        <h1 className="text-2xl font-bold">Your Orders</h1>
+      </div>
+
+      <div className="p-4 max-w-[480px] mx-auto">
         {orders.length === 0 ? (
-          <div className="bg-white rounded-2xl shadow-md p-6 text-center">
-            <p className="text-gray-600">You haven't placed any orders yet</p>
-          </div>
+          <div className="text-center text-gray-500 mt-4">No orders found</div>
         ) : (
           <div className="space-y-4">
             {orders.map((order) => (
@@ -141,8 +178,8 @@ const Orders: React.FC = () => {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <span className="text-sm text-gray-500">
-                      {order.timestamp instanceof Date 
-                        ? order.timestamp.toLocaleString()
+                      {order.timestamp?.toDate?.() 
+                        ? order.timestamp.toDate().toLocaleString()
                         : new Date().toLocaleString()}
                     </span>
                     <h3 className="font-semibold text-gray-800">
@@ -155,6 +192,7 @@ const Orders: React.FC = () => {
                       <span>{order.status.charAt(0).toUpperCase() + order.status.slice(1)}</span>
                     </div>
                     <div className={`px-3 py-1 rounded-full text-sm font-medium flex items-center gap-2 ${getPaymentStatusColor(order.paymentStatus)}`}>
+                      {getPaymentStatusIcon(order.paymentStatus)}
                       <span>{order.paymentStatus.charAt(0).toUpperCase() + order.paymentStatus.slice(1)}</span>
                     </div>
                   </div>

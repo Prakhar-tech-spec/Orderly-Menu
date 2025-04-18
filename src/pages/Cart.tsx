@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiTrash2, FiArrowLeft, FiMinus, FiPlus } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
@@ -27,6 +27,24 @@ const Cart: React.FC = () => {
   const [orderStatus, setOrderStatus] = useState<string>('');
   const [inputTableNumber, setInputTableNumber] = useState(tableNumber || '');
   const [error, setError] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<string>('Cash');
+
+  // Get user's IP address
+  useEffect(() => {
+    const getIP = async () => {
+      try {
+        const response = await fetch('https://api.ipify.org?format=json');
+        const data = await response.json();
+        setUserIP(data.ip);
+      } catch (error) {
+        console.error('Error fetching IP:', error);
+        setError('Failed to get your IP address. Please try refreshing the page.');
+      }
+    };
+
+    getIP();
+  }, []);
 
   const calculateItemTotal = (item: CartItem) => {
     const baseTotal = item.price * item.quantity;
@@ -80,7 +98,7 @@ const Cart: React.FC = () => {
         totalAmount: calculateTotal(),
         status: 'pending',
         paymentStatus: 'unpaid',
-        paymentMethod: 'Cash',
+        paymentMethod,
         timestamp: serverTimestamp(),
         createdAt: new Date().toISOString(),
         userIP: userIP || 'unknown',
