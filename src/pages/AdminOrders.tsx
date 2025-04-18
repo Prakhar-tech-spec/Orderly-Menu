@@ -181,13 +181,35 @@ const AdminOrders: React.FC = () => {
       const orderToUpdate = orders.find(o => o.id === orderId);
       
       // If the order is being marked as paid, also ensure it's marked as completed
-      if (newStatus === 'paid' && orderToUpdate && (orderToUpdate.status as string) !== 'completed') {
-        console.log('Also marking order as completed');
+      if (newStatus === 'paid') {
+        console.log('Marking order as paid and completed');
         await updateDoc(orderRef, {
           paymentStatus: newStatus,
           status: 'completed',
-          lastUpdated: serverTimestamp()
+          lastUpdated: serverTimestamp(),
+          paidAt: serverTimestamp() // Add timestamp for when payment was received
         });
+        
+        // Optimistically update the local state to improve UI responsiveness
+        if (orderToUpdate) {
+          // Clone the current orders array
+          const updatedOrders = orders.map(order => {
+            if (order.id === orderId) {
+              return {
+                ...order,
+                paymentStatus: 'paid' as Order['paymentStatus'],
+                status: 'completed' as Order['status']
+              };
+            }
+            return order;
+          });
+          
+          // Update the orders state with the modified array
+          setOrders(updatedOrders);
+          
+          // Update payment statistics
+          updatePaymentStats(updatedOrders);
+        }
       } else {
         await updateDoc(orderRef, {
           paymentStatus: newStatus,
@@ -414,51 +436,43 @@ const AdminOrders: React.FC = () => {
 
                   {/* Admin Action Buttons */}
                   <div className="mt-4 flex gap-2">
-                    {(order.status as string) === 'completed' ? (
-                      <button
-                        onClick={() => updatePaymentStatus(order.id, 'paid')}
-                        className="w-full py-2 px-4 rounded-full font-medium transition-colors bg-[#FE4A12] text-white"
-                        disabled={order.paymentStatus === 'paid'}
-                      >
-                        Mark as Paid (Order Completed)
-                      </button>
-                    ) : (
-                      <>
-                        <button
-                          onClick={() => updateOrderStatus(order.id, 'preparing')}
-                          className={`flex-1 py-2 px-4 rounded-full font-medium transition-colors ${
-                            order.status === 'preparing'
-                              ? 'bg-[#FE4A12] text-white'
-                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                          }`}
-                          disabled={order.paymentStatus === 'paid'}
-                        >
-                          Preparing
-                        </button>
-                        <button
-                          onClick={() => updateOrderStatus(order.id, 'completed')}
-                          className={`flex-1 py-2 px-4 rounded-full font-medium transition-colors ${
-                            (order.status as string) === 'completed'
-                              ? 'bg-[#FE4A12] text-white'
-                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                          }`}
-                          disabled={order.paymentStatus === 'paid'}
-                        >
-                          Completed
-                        </button>
-                        <button
-                          onClick={() => updatePaymentStatus(order.id, 'paid')}
-                          className={`flex-1 py-2 px-4 rounded-full font-medium transition-colors ${
-                            order.paymentStatus === 'paid'
-                              ? 'bg-green-500 text-white'
-                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                          }`}
-                          disabled={order.paymentStatus === 'paid'}
-                        >
-                          Paid
-                        </button>
-                      </>
-                    )}
+                    <button
+                      onClick={() => updateOrderStatus(order.id, 'preparing')}
+                      className={`flex-1 py-2 px-4 rounded-full font-medium transition-colors ${
+                        (order.status as string) === 'preparing'
+                          ? 'bg-[#FE4A12] text-white'
+                          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                      }`}
+                      disabled={order.paymentStatus === 'paid'}
+                    >
+                      Preparing
+                    </button>
+                    <button
+                      onClick={() => updateOrderStatus(order.id, 'completed')}
+                      className={`flex-1 py-2 px-4 rounded-full font-medium transition-colors ${
+                        (order.status as string) === 'completed'
+                          ? 'bg-[#FE4A12] text-white'
+                          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                      }`}
+                      disabled={order.paymentStatus === 'paid'}
+                    >
+                      Completed
+                    </button>
+                    <button
+                      onClick={() => updatePaymentStatus(order.id, 'paid')}
+                      className={`flex-1 py-2 px-4 rounded-full font-medium transition-colors ${
+                        order.paymentStatus === 'paid'
+                          ? 'bg-green-500 text-white'
+                          : (order.status as string) === 'completed'
+                            ? 'bg-[#FE4A12] text-white font-bold'
+                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                      }`}
+                      disabled={order.paymentStatus === 'paid'}
+                    >
+                      {(order.status as string) === 'completed' && order.paymentStatus === 'unpaid'
+                        ? 'COLLECT PAYMENT'
+                        : 'Paid'}
+                    </button>
                   </div>
                 </div>
               </motion.div>
