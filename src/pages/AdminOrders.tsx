@@ -435,43 +435,44 @@ const AdminOrders: React.FC = () => {
                   )}
 
                   {/* Admin Action Buttons */}
-                  <div className="mt-4 flex gap-2">
-                    <button
-                      onClick={() => updateOrderStatus(order.id, 'preparing')}
-                      className={`flex-1 py-2 px-4 rounded-full font-medium transition-colors ${
-                        (order.status as string) === 'preparing'
-                          ? 'bg-[#FE4A12] text-white'
-                          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                      }`}
-                      disabled={order.paymentStatus === 'paid'}
-                    >
-                      Preparing
-                    </button>
-                    <button
-                      onClick={() => updateOrderStatus(order.id, 'completed')}
-                      className={`flex-1 py-2 px-4 rounded-full font-medium transition-colors ${
-                        (order.status as string) === 'completed'
-                          ? 'bg-[#FE4A12] text-white'
-                          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                      }`}
-                      disabled={order.paymentStatus === 'paid'}
-                    >
-                      Completed
-                    </button>
+                  <div className="mt-4 flex flex-col gap-2">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => updateOrderStatus(order.id, 'preparing')}
+                        className={`flex-1 py-3 px-4 rounded-xl font-medium transition-colors ${
+                          (order.status as string) === 'preparing'
+                            ? 'bg-[#FE4A12] text-white'
+                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        }`}
+                        disabled={order.paymentStatus === 'paid'}
+                      >
+                        Preparing
+                      </button>
+                      <button
+                        onClick={() => updateOrderStatus(order.id, 'completed')}
+                        className={`flex-1 py-3 px-4 rounded-xl font-medium transition-colors ${
+                          (order.status as string) === 'completed'
+                            ? 'bg-[#FE4A12] text-white'
+                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        }`}
+                        disabled={order.paymentStatus === 'paid'}
+                      >
+                        Completed
+                      </button>
+                    </div>
+                    
                     <button
                       onClick={() => updatePaymentStatus(order.id, 'paid')}
-                      className={`flex-1 py-2 px-4 rounded-full font-medium transition-colors ${
+                      className={`w-full py-3 px-4 rounded-xl font-medium shadow-md transition-colors ${
                         order.paymentStatus === 'paid'
                           ? 'bg-green-500 text-white'
-                          : (order.status as string) === 'completed'
-                            ? 'bg-[#FE4A12] text-white font-bold'
-                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          : 'bg-blue-600 text-white hover:bg-blue-700'
                       }`}
                       disabled={order.paymentStatus === 'paid'}
                     >
-                      {(order.status as string) === 'completed' && order.paymentStatus === 'unpaid'
-                        ? 'COLLECT PAYMENT'
-                        : 'Paid'}
+                      {order.paymentStatus === 'paid'
+                        ? 'PAID ✓'
+                        : 'MARK AS PAID'}
                     </button>
                   </div>
                 </div>
