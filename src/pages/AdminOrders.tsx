@@ -242,7 +242,8 @@ const AdminOrders: React.FC = () => {
   // Filter orders based on the active tab
   const filteredOrders = orders.filter(order => {
     if (activeTab === 'active') {
-      return order.status !== 'completed';
+      // Show all orders that are not both completed AND paid
+      return !(order.status === 'completed' && order.paymentStatus === 'paid');
     } else if (activeTab === 'completed') {
       return order.status === 'completed' && order.paymentStatus === 'paid';
     } else if (activeTab === 'unpaidCompleted') {
@@ -402,8 +403,8 @@ const AdminOrders: React.FC = () => {
 
                   {/* Admin Action Buttons */}
                   <div className="mt-4 flex flex-wrap gap-2">
-                    {/* Order Status Buttons */}
-                    {order.status !== 'completed' && (
+                    {/* Show Order Status Buttons if not completed */}
+                    {order.status !== 'completed' ? (
                       <>
                         <button
                           onClick={() => updateOrderStatus(order.id, 'preparing')}
@@ -426,17 +427,33 @@ const AdminOrders: React.FC = () => {
                           Completed
                         </button>
                       </>
-                    )}
-                    
-                    {/* Payment Status Button */}
-                    {order.paymentStatus === 'unpaid' && (
-                      <button
-                        onClick={() => updatePaymentStatus(order.id, 'paid')}
-                        className="w-full mt-2 py-2 px-4 rounded-full font-medium bg-green-100 text-green-800 hover:bg-green-200 transition-colors flex items-center justify-center gap-2"
-                      >
-                        <FiDollarSign />
-                        Mark as Paid
-                      </button>
+                    ) : (
+                      <>
+                        {/* Show Payment Status Buttons if completed */}
+                        <button
+                          onClick={() => updatePaymentStatus(order.id, 'unpaid')}
+                          className={`flex-1 py-2 px-4 rounded-full font-medium transition-colors flex items-center justify-center gap-2 ${
+                            order.paymentStatus === 'unpaid'
+                              ? 'bg-red-500 text-white'
+                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
+                          disabled={order.paymentStatus === 'paid'}
+                        >
+                          <FiAlertCircle />
+                          Unpaid
+                        </button>
+                        <button
+                          onClick={() => updatePaymentStatus(order.id, 'paid')}
+                          className={`flex-1 py-2 px-4 rounded-full font-medium transition-colors flex items-center justify-center gap-2 ${
+                            order.paymentStatus === 'paid'
+                              ? 'bg-green-500 text-white'
+                              : 'bg-gray-100 text-gray-500 hover:bg-green-200'
+                          }`}
+                        >
+                          <FiDollarSign />
+                          Paid
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
