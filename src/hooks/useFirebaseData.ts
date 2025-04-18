@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { collection, getDocs, query, where } from 'firebase/firestore';
+import { collection, getDocs, query, where, DocumentData, Query, CollectionReference } from 'firebase/firestore';
 import { firestore } from '../config/firebase';
 
 export const useFirebaseData = (collectionName: string, category?: string) => {
-  const [data, setData] = useState<any[]>([]);
+  const [data, setData] = useState<DocumentData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -13,7 +13,7 @@ export const useFirebaseData = (collectionName: string, category?: string) => {
         setLoading(true);
         setError(null);
         
-        let q = collection(firestore, collectionName);
+        let q: Query<DocumentData> | CollectionReference<DocumentData> = collection(firestore, collectionName);
         if (category) {
           q = query(q, where('category', '==', category));
         }
