@@ -423,57 +423,60 @@ const AdminOrders: React.FC = () => {
                     <span>Total</span>
                     <span>₹{order.totalAmount}</span>
                   </div>
-                  <div className="text-sm text-gray-500 mt-1">
+                  <div className="text-sm text-gray-500 mt-1 mb-4">
                     Payment: {order.paymentMethod}
                   </div>
 
-                  {/* Notice for completed but unpaid orders */}
-                  {(order.status as string) === 'completed' && order.paymentStatus === 'unpaid' && (
-                    <div className="mt-2 p-2 bg-yellow-50 text-yellow-800 rounded-lg text-sm">
-                      <strong>Note:</strong> This order is completed but not yet paid. Please collect payment.
-                    </div>
-                  )}
-
-                  {/* Admin Action Buttons */}
-                  <div className="mt-4 flex flex-col gap-2">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => updateOrderStatus(order.id, 'preparing')}
-                        className={`flex-1 py-3 px-4 rounded-xl font-medium transition-colors ${
-                          (order.status as string) === 'preparing'
-                            ? 'bg-[#FE4A12] text-white'
-                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                        }`}
-                        disabled={order.paymentStatus === 'paid'}
-                      >
-                        Preparing
-                      </button>
-                      <button
-                        onClick={() => updateOrderStatus(order.id, 'completed')}
-                        className={`flex-1 py-3 px-4 rounded-xl font-medium transition-colors ${
-                          (order.status as string) === 'completed'
-                            ? 'bg-[#FE4A12] text-white'
-                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                        }`}
-                        disabled={order.paymentStatus === 'paid'}
-                      >
-                        Completed
-                      </button>
-                    </div>
+                  {/* Order Status Workflow */}
+                  <div className="border border-gray-200 rounded-lg p-4 bg-white">
+                    <h4 className="text-center font-bold text-xl mb-4">order</h4>
                     
-                    <button
-                      onClick={() => updatePaymentStatus(order.id, 'paid')}
-                      className={`w-full py-3 px-4 rounded-xl font-medium shadow-md transition-colors ${
-                        order.paymentStatus === 'paid'
-                          ? 'bg-green-500 text-white'
-                          : 'bg-blue-600 text-white hover:bg-blue-700'
-                      }`}
-                      disabled={order.paymentStatus === 'paid'}
-                    >
-                      {order.paymentStatus === 'paid'
-                        ? 'PAID ✓'
-                        : 'MARK AS PAID'}
-                    </button>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div 
+                        className={`p-2 ${
+                          (order.status as string) === 'preparing' 
+                            ? 'font-bold text-[#FE4A12]' 
+                            : 'text-gray-600'
+                        } cursor-pointer`}
+                        onClick={() => {
+                          if (order.paymentStatus !== 'paid') {
+                            updateOrderStatus(order.id, 'preparing');
+                          }
+                        }}
+                      >
+                        preparing
+                      </div>
+                      
+                      <div 
+                        className={`p-2 ${
+                          (order.status as string) === 'completed' 
+                            ? 'font-bold text-[#FE4A12]' 
+                            : 'text-gray-600'
+                        } cursor-pointer`}
+                        onClick={() => {
+                          if (order.paymentStatus !== 'paid') {
+                            updateOrderStatus(order.id, 'completed');
+                          }
+                        }}
+                      >
+                        completed
+                      </div>
+                      
+                      <div 
+                        className={`p-2 ${
+                          order.paymentStatus === 'paid' 
+                            ? 'font-bold text-green-500' 
+                            : 'text-gray-600'
+                        } cursor-pointer`}
+                        onClick={() => {
+                          if (order.paymentStatus !== 'paid') {
+                            updatePaymentStatus(order.id, 'paid');
+                          }
+                        }}
+                      >
+                        Paid
+                      </div>
+                    </div>
                   </div>
                 </div>
               </motion.div>
