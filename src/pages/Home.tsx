@@ -61,8 +61,8 @@ const Home: React.FC = () => {
         >
           <div className="flex justify-between items-start relative z-20">
             <div className="max-w-[60%]">
-              <p className="text-sm font-medium mb-2">Use code <span className="font-bold">FIRST40</span></p>
-              <h2 className="text-2xl font-bold">Get 40% off<br />Your First Order!</h2>
+              <p className="text-sm font-medium mb-2">Raja Dhaba</p>
+              <h2 className="text-2xl font-bold">Not Just a Dhaba,<br />It's a Mood!</h2>
             </div>
           </div>
           
