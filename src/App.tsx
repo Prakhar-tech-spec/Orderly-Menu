@@ -20,6 +20,7 @@ import FirebaseMigration from './pages/FirebaseMigration';
 import DataMigration from './pages/DataMigration';
 import AdminOrders from './pages/AdminOrders';
 import { UserProvider } from './context/UserContext';
+import AuthProvider from './context/AuthContext';
 
 const queryClient = new QueryClient();
 
@@ -139,15 +140,17 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <FirebaseProvider>
-          <UserProvider>
-            <CartProvider>
-              <OrderProvider>
-                <Router>
-                  <AppRoutes />
-                </Router>
-              </OrderProvider>
-            </CartProvider>
-          </UserProvider>
+          <AuthProvider>
+            <UserProvider>
+              <CartProvider>
+                <OrderProvider>
+                  <Router>
+                    <AppRoutes />
+                  </Router>
+                </OrderProvider>
+              </CartProvider>
+            </UserProvider>
+          </AuthProvider>
         </FirebaseProvider>
       </ThemeProvider>
     </QueryClientProvider>

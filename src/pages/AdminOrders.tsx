@@ -414,14 +414,10 @@ const AdminOrders: React.FC = () => {
                       </button>
                     </div>
                     
-                    {/* Second row: Payment button */}
+                    {/* Standalone Paid button - Always visible */}
                     <button
                       onClick={() => updatePaymentStatus(order.id, 'paid')}
-                      className={`w-full py-3 px-4 rounded-full font-medium transition-colors flex items-center justify-center gap-2 ${
-                        order.paymentStatus === 'paid'
-                          ? 'bg-green-500 text-white'
-                          : 'bg-emerald-600 text-white hover:bg-emerald-700'
-                      }`}
+                      className="w-full py-3 px-4 rounded-full font-medium bg-green-500 text-white hover:bg-green-600 transition-colors flex items-center justify-center gap-2"
                       disabled={order.paymentStatus === 'paid'}
                     >
                       <FiDollarSign className="w-5 h-5" />
