@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { collection, getDocs, limit, orderBy, query } from 'firebase/firestore';
+import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { firestore } from '../config/firebase';
 import { motion } from 'framer-motion';
 import { FiClock, FiCheckCircle, FiDollarSign, FiAlertCircle } from 'react-icons/fi';
@@ -33,20 +33,47 @@ const Orders: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
-  const { tableNumber } = useUser();
+  const { tableNumber, deviceId, userIP } = useUser();
+
+  // Create a unique user identifier fingerprint combining multiple identifiers
+  const getUserFingerprint = () => {
+    // Get a list of identifiers, starting with most reliable
+    const identifiers = [];
+    
+    // Browser storage identifier is most reliable
+    if (deviceId) identifiers.push(deviceId); 
+    
+    // Table number is reliable during a session
+    if (tableNumber) identifiers.push(`table-${tableNumber}`);
+    
+    // IP as last resort
+    if (userIP) identifiers.push(userIP);
+    
+    return identifiers;
+  };
 
   useEffect(() => {
     const fetchAllOrders = async () => {
       try {
-        console.log('Fetching all recent orders...');
+        console.log('Fetching orders...');
         setLoading(true);
         
-        // Fetch all recent orders (last 30 days)
+        // Get user identifiers
+        const userIdentifiers = getUserFingerprint();
+        console.log('User identifiers:', userIdentifiers);
+        
+        if (userIdentifiers.length === 0) {
+          console.error('No user identification available');
+          setError('Unable to identify your device. Please try again later.');
+          setLoading(false);
+          return;
+        }
+        
+        // Fetch all recent orders
         const ordersRef = collection(firestore, 'orders');
         const q = query(
           ordersRef,
-          orderBy('timestamp', 'desc'),
-          limit(50) // Limit to recent orders
+          orderBy('timestamp', 'desc')
         );
         
         const snapshot = await getDocs(q);
@@ -60,47 +87,46 @@ const Orders: React.FC = () => {
         
         console.log('Found orders:', snapshot.size);
         
-        // Filter orders on the client side for maximum compatibility
-        // This avoids complex Firestore queries that require special indexes
-        const allOrders: Order[] = [];
+        // Filter orders on the client side 
+        const userOrders: Order[] = [];
         
         snapshot.forEach((doc) => {
           const data = doc.data();
+          let matchesUser = false;
           
-          allOrders.push({
-            id: doc.id,
-            items: data.items || [],
-            tableNumber: data.tableNumber || 'Unknown',
-            totalAmount: data.totalAmount || 0,
-            status: data.status || 'pending',
-            paymentStatus: data.paymentStatus || 'unpaid',
-            timestamp: data.timestamp,
-            paymentMethod: data.paymentMethod || 'Cash',
-            userIP: data.userIP || '',
-            deviceId: data.deviceId || ''
-          });
+          // Check if order matches any of the user identifiers
+          if (deviceId && data.deviceId === deviceId) {
+            matchesUser = true;
+          } else if (tableNumber && data.tableNumber === tableNumber) {
+            matchesUser = true;
+          } else if (userIP && data.userIP === userIP) {
+            matchesUser = true;
+          }
+          
+          // Only include orders that match this user
+          if (matchesUser) {
+            userOrders.push({
+              id: doc.id,
+              items: data.items || [],
+              tableNumber: data.tableNumber || 'Unknown',
+              totalAmount: data.totalAmount || 0,
+              status: data.status || 'pending',
+              paymentStatus: data.paymentStatus || 'unpaid',
+              timestamp: data.timestamp,
+              paymentMethod: data.paymentMethod || 'Cash',
+              userIP: data.userIP || '',
+              deviceId: data.deviceId || ''
+            });
+          }
         });
         
-        console.log('Successfully parsed all orders');
+        console.log('Filtered orders for this user:', userOrders.length);
         
-        // First try to match by table number which is most reliable
-        if (tableNumber) {
-          const tableOrders = allOrders.filter(order => 
-            order.tableNumber === tableNumber
-          );
-          
-          if (tableOrders.length > 0) {
-            console.log('Found orders matching table number:', tableNumber);
-            setOrders(tableOrders);
-            setLoading(false);
-            setError('');
-            return;
-          }
+        if (userOrders.length === 0) {
+          console.log('No orders found for this user');
         }
         
-        // If no device/IP specific filtering worked, just show all orders
-        console.log('Showing all recent orders');
-        setOrders(allOrders);
+        setOrders(userOrders);
         setLoading(false);
         setError('');
         
@@ -122,7 +148,7 @@ const Orders: React.FC = () => {
     return () => {
       clearInterval(intervalId);
     };
-  }, [tableNumber]);
+  }, [tableNumber, deviceId, userIP]);
 
   const getStatusColor = (status: Order['status']) => {
     switch (status) {
