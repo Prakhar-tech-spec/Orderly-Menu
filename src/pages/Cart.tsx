@@ -22,7 +22,7 @@ interface CartItem {
 const Cart: React.FC = () => {
   const navigate = useNavigate();
   const { items, removeItem, updateQuantity, clearCart } = useCart();
-  const { tableNumber, validateAndSetTableNumber } = useUser();
+  const { tableNumber, validateAndSetTableNumber, userIP, deviceId } = useUser();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [orderStatus, setOrderStatus] = useState<string>('');
   const [inputTableNumber, setInputTableNumber] = useState(tableNumber || '');
@@ -82,7 +82,9 @@ const Cart: React.FC = () => {
         paymentStatus: 'unpaid',
         paymentMethod: 'Cash',
         timestamp: serverTimestamp(),
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        userIP: userIP || 'unknown',
+        deviceId: deviceId || 'unknown'
       };
 
       console.log('Order data prepared:', orderData); // Debug log

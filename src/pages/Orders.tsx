@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, where, Timestamp } from 'firebase/firestore';
 import { firestore } from '../config/firebase';
 import { motion } from 'framer-motion';
 import { FiClock, FiCheckCircle } from 'react-icons/fi';
+import { useUser } from '../context/UserContext';
 
 interface OrderItem {
   id: string;
@@ -21,34 +22,63 @@ interface Order {
   tableNumber: string;
   totalAmount: number;
   status: 'pending' | 'preparing' | 'completed';
-  timestamp: Date;
+  paymentStatus: 'paid' | 'unpaid';
+  timestamp: any;
   paymentMethod: string;
+  userIP?: string;
+  deviceId?: string;
 }
 
 const Orders: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const { userIP, deviceId } = useUser();
 
   useEffect(() => {
-    // Subscribe to orders collection in real-time
-    const q = query(collection(firestore, 'orders'), orderBy('timestamp', 'desc'));
+    if (!userIP && !deviceId) {
+      // Still loading user info
+      return;
+    }
+
+    console.log('Fetching orders for user IP:', userIP, 'and device ID:', deviceId);
+    
+    // Create a query to filter orders by this user's identifiers
+    const ordersRef = collection(firestore, 'orders');
+    const q = query(
+      ordersRef,
+      // Use OR condition to match either userIP or deviceId
+      where('userIP', '==', userIP || 'unknown'), 
+      orderBy('timestamp', 'desc')
+    );
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const ordersData: Order[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
-        ordersData.push({
-          id: doc.id,
-          ...data,
-          timestamp: data.timestamp.toDate()
-        } as Order);
+        
+        // Optional: second check to ensure we only include this user's orders
+        // (only necessary if query can't do OR condition between userIP and deviceId)
+        if (
+          (data.userIP === userIP || data.deviceId === deviceId) ||
+          (data.tableNumber === localStorage.getItem('tableNumber'))
+        ) {
+          ordersData.push({
+            id: doc.id,
+            ...data,
+            timestamp: data.timestamp instanceof Timestamp ? 
+              data.timestamp.toDate() : 
+              new Date(data.createdAt || Date.now())
+          } as Order);
+        }
       });
+      
+      console.log('Found orders for current user:', ordersData.length);
       setOrders(ordersData);
       setLoading(false);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [userIP, deviceId]);
 
   const getStatusColor = (status: Order['status']) => {
     switch (status) {
@@ -76,10 +106,16 @@ const Orders: React.FC = () => {
     }
   };
 
+  const getPaymentStatusColor = (status: Order['paymentStatus']) => {
+    return status === 'paid' 
+      ? 'bg-green-100 text-green-800' 
+      : 'bg-red-100 text-red-800';
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 p-4 flex items-center justify-center">
-        <div className="text-gray-600">Loading orders...</div>
+        <div className="text-gray-600">Loading your orders...</div>
       </div>
     );
   }
@@ -91,7 +127,7 @@ const Orders: React.FC = () => {
         
         {orders.length === 0 ? (
           <div className="bg-white rounded-2xl shadow-md p-6 text-center">
-            <p className="text-gray-600">No orders yet</p>
+            <p className="text-gray-600">You haven't placed any orders yet</p>
           </div>
         ) : (
           <div className="space-y-4">
@@ -105,15 +141,22 @@ const Orders: React.FC = () => {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <span className="text-sm text-gray-500">
-                      {order.timestamp.toLocaleString()}
+                      {order.timestamp instanceof Date 
+                        ? order.timestamp.toLocaleString()
+                        : new Date().toLocaleString()}
                     </span>
                     <h3 className="font-semibold text-gray-800">
                       Table {order.tableNumber}
                     </h3>
                   </div>
-                  <div className={`px-3 py-1 rounded-full text-sm font-medium flex items-center gap-2 ${getStatusColor(order.status)}`}>
-                    {getStatusIcon(order.status)}
-                    <span>{order.status.charAt(0).toUpperCase() + order.status.slice(1)}</span>
+                  <div className="flex gap-2">
+                    <div className={`px-3 py-1 rounded-full text-sm font-medium flex items-center gap-2 ${getStatusColor(order.status)}`}>
+                      {getStatusIcon(order.status)}
+                      <span>{order.status.charAt(0).toUpperCase() + order.status.slice(1)}</span>
+                    </div>
+                    <div className={`px-3 py-1 rounded-full text-sm font-medium flex items-center gap-2 ${getPaymentStatusColor(order.paymentStatus)}`}>
+                      <span>{order.paymentStatus.charAt(0).toUpperCase() + order.paymentStatus.slice(1)}</span>
+                    </div>
                   </div>
                 </div>
 
