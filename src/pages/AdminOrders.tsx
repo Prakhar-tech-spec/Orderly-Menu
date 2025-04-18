@@ -419,7 +419,7 @@ const AdminOrders: React.FC = () => {
                         <button
                           onClick={() => updateOrderStatus(order.id, 'completed')}
                           className={`flex-1 py-2 px-4 rounded-full font-medium transition-colors ${
-                            order.status === 'completed'
+                            order.status === 'completed' as Order['status']
                               ? 'bg-[#FE4A12] text-white'
                               : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
                           }`}
