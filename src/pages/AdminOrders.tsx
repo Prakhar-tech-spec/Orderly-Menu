@@ -158,10 +158,23 @@ const AdminOrders: React.FC = () => {
       console.log('Updating payment status:', orderId, 'to', newStatus);
       const orderRef = doc(firestore, 'orders', orderId);
       
-      await updateDoc(orderRef, {
-        paymentStatus: newStatus,
-        lastUpdated: serverTimestamp()
-      });
+      // Find the order in the current state
+      const orderToUpdate = orders.find(o => o.id === orderId);
+      
+      // If the order is being marked as paid, also ensure it's marked as completed
+      if (newStatus === 'paid' && orderToUpdate && orderToUpdate.status !== 'completed') {
+        console.log('Also marking order as completed');
+        await updateDoc(orderRef, {
+          paymentStatus: newStatus,
+          status: 'completed',
+          lastUpdated: serverTimestamp()
+        });
+      } else {
+        await updateDoc(orderRef, {
+          paymentStatus: newStatus,
+          lastUpdated: serverTimestamp()
+        });
+      }
       
       console.log('Successfully updated payment status');
     } catch (error) {
@@ -375,39 +388,44 @@ const AdminOrders: React.FC = () => {
 
                   {/* Admin Action Buttons */}
                   <div className="mt-4 flex flex-wrap gap-2">
+                    {/* First row: Order status buttons */}
+                    <div className="flex w-full gap-2 mb-2">
+                      <button
+                        onClick={() => updateOrderStatus(order.id, 'preparing')}
+                        className={`flex-1 py-2 px-4 rounded-full font-medium transition-colors ${
+                          order.status === 'preparing'
+                            ? 'bg-[#FE4A12] text-white'
+                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        }`}
+                        disabled={order.paymentStatus === 'paid'}
+                      >
+                        Preparing
+                      </button>
+                      <button
+                        onClick={() => updateOrderStatus(order.id, 'completed')}
+                        className={`flex-1 py-2 px-4 rounded-full font-medium transition-colors ${
+                          order.status === 'completed'
+                            ? 'bg-[#FE4A12] text-white'
+                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                        }`}
+                        disabled={order.paymentStatus === 'paid'}
+                      >
+                        Completed
+                      </button>
+                    </div>
+                    
+                    {/* Second row: Payment button */}
                     <button
-                      onClick={() => updateOrderStatus(order.id, 'preparing')}
-                      className={`flex-1 py-2 px-4 rounded-full font-medium transition-colors ${
-                        order.status === 'preparing'
-                          ? 'bg-[#FE4A12] text-white'
-                          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                      }`}
-                      disabled={order.status === 'completed' || order.paymentStatus === 'paid'}
-                    >
-                      Preparing
-                    </button>
-                    <button
-                      onClick={() => updateOrderStatus(order.id, 'completed')}
-                      className={`flex-1 py-2 px-4 rounded-full font-medium transition-colors ${
-                        order.status === 'completed'
-                          ? 'bg-[#FE4A12] text-white'
-                          : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                      onClick={() => updatePaymentStatus(order.id, 'paid')}
+                      className={`w-full py-3 px-4 rounded-full font-medium transition-colors flex items-center justify-center gap-2 ${
+                        order.paymentStatus === 'paid'
+                          ? 'bg-green-500 text-white'
+                          : 'bg-emerald-600 text-white hover:bg-emerald-700'
                       }`}
                       disabled={order.paymentStatus === 'paid'}
                     >
-                      Completed
-                    </button>
-                    <button
-                      onClick={() => updatePaymentStatus(order.id, 'paid')}
-                      className={`flex-1 py-2 px-4 rounded-full font-medium transition-colors flex items-center justify-center gap-2 ${
-                        order.paymentStatus === 'paid'
-                          ? 'bg-green-500 text-white'
-                          : 'bg-gray-100 text-gray-500 hover:bg-green-200'
-                      }`}
-                      disabled={order.status !== 'completed' || order.paymentStatus === 'paid'}
-                    >
-                      <FiDollarSign />
-                      Paid
+                      <FiDollarSign className="w-5 h-5" />
+                      {order.paymentStatus === 'paid' ? 'Paid' : 'Mark as Paid'}
                     </button>
                   </div>
                 </div>
