@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, orderBy, onSnapshot, where } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, where, or } from 'firebase/firestore';
 import { firestore } from '../config/firebase';
 import { motion } from 'framer-motion';
 import { FiClock, FiCheckCircle, FiDollarSign, FiAlertCircle } from 'react-icons/fi';
+import { useUser } from '../context/UserContext';
 
 interface OrderItem {
   id: string;
@@ -25,83 +26,106 @@ interface Order {
   timestamp: any;
   paymentMethod: string;
   userIP: string;
+  deviceId?: string;
 }
 
 const Orders: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
-  const [userIP, setUserIP] = useState<string>('');
-
-  // Get user's IP address
-  useEffect(() => {
-    const getIP = async () => {
-      try {
-        const response = await fetch('https://api.ipify.org?format=json');
-        const data = await response.json();
-        setUserIP(data.ip);
-      } catch (error) {
-        console.error('Error fetching IP:', error);
-        setError('Failed to load orders. Please try refreshing the page.');
-        setLoading(false);
-      }
-    };
-
-    getIP();
-  }, []);
+  const { userIP, deviceId, isLoading } = useUser();
 
   // Set up real-time listener for orders
   useEffect(() => {
-    if (!userIP) {
+    // Wait for user context to load
+    if (isLoading) {
+      console.log('Waiting for user context to load...');
       return;
     }
 
-    console.log('Setting up real-time listener for orders with IP:', userIP);
+    console.log('Setting up real-time listener for orders with IP:', userIP, 'and Device ID:', deviceId);
+    
+    if (!userIP && !deviceId) {
+      console.error('No user identification available');
+      setError('Unable to identify your device. Please try again later.');
+      setLoading(false);
+      return;
+    }
     
     const ordersRef = collection(firestore, 'orders');
-    const q = query(
-      ordersRef,
-      where('userIP', '==', userIP),
-      orderBy('timestamp', 'desc')
-    );
     
-    const unsubscribe = onSnapshot(q, 
-      (snapshot) => {
-        console.log('Received snapshot with', snapshot.size, 'orders');
-        const ordersData: Order[] = [];
-        snapshot.forEach((doc) => {
-          const data = doc.data();
-          console.log('Processing order:', doc.id, data);
-          
-          ordersData.push({
-            id: doc.id,
-            items: data.items || [],
-            tableNumber: data.tableNumber || 'Unknown',
-            totalAmount: data.totalAmount || 0,
-            status: data.status || 'pending',
-            paymentStatus: data.paymentStatus || 'unpaid',
-            timestamp: data.timestamp,
-            paymentMethod: data.paymentMethod || 'Cash',
-            userIP: data.userIP || ''
-          });
-        });
-        console.log('Setting orders state with', ordersData.length, 'orders');
-        setOrders(ordersData);
-        setLoading(false);
-        setError('');
-      },
-      (error) => {
-        console.error('Error in real-time listener:', error);
-        setError('Failed to load orders. Please try refreshing the page.');
-        setLoading(false);
+    // Create a query to find orders matching either userIP or deviceId
+    let q;
+    
+    try {
+      if (userIP && deviceId) {
+        q = query(
+          ordersRef,
+          or(
+            where('userIP', '==', userIP),
+            where('deviceId', '==', deviceId)
+          ),
+          orderBy('timestamp', 'desc')
+        );
+      } else if (userIP) {
+        q = query(
+          ordersRef,
+          where('userIP', '==', userIP),
+          orderBy('timestamp', 'desc')
+        );
+      } else {
+        q = query(
+          ordersRef,
+          where('deviceId', '==', deviceId),
+          orderBy('timestamp', 'desc')
+        );
       }
-    );
+      
+      console.log('Query created successfully');
+      
+      const unsubscribe = onSnapshot(q, 
+        (snapshot) => {
+          console.log('Received snapshot with', snapshot.size, 'orders');
+          const ordersData: Order[] = [];
+          snapshot.forEach((doc) => {
+            const data = doc.data();
+            console.log('Processing order:', doc.id, data);
+            
+            ordersData.push({
+              id: doc.id,
+              items: data.items || [],
+              tableNumber: data.tableNumber || 'Unknown',
+              totalAmount: data.totalAmount || 0,
+              status: data.status || 'pending',
+              paymentStatus: data.paymentStatus || 'unpaid',
+              timestamp: data.timestamp,
+              paymentMethod: data.paymentMethod || 'Cash',
+              userIP: data.userIP || '',
+              deviceId: data.deviceId || ''
+            });
+          });
+          console.log('Setting orders state with', ordersData.length, 'orders');
+          setOrders(ordersData);
+          setLoading(false);
+          setError('');
+        },
+        (error) => {
+          console.error('Error in real-time listener:', error);
+          setError('Failed to load orders. Please try refreshing the page.');
+          setLoading(false);
+        }
+      );
 
-    return () => {
-      console.log('Cleaning up orders subscription...');
-      unsubscribe();
-    };
-  }, [userIP]);
+      return () => {
+        console.log('Cleaning up orders subscription...');
+        unsubscribe();
+      };
+    } catch (error) {
+      console.error('Error setting up query:', error);
+      setError('Failed to load orders. Please try refreshing the page.');
+      setLoading(false);
+    }
+  }, [userIP, deviceId, isLoading]);
 
   const getStatusColor = (status: Order['status']) => {
     switch (status) {
@@ -141,7 +165,7 @@ const Orders: React.FC = () => {
       : <FiAlertCircle className="w-5 h-5" />;
   };
 
-  if (loading) {
+  if (loading || isLoading) {
     return (
       <div className="min-h-screen bg-white p-4 flex items-center justify-center">
         <div className="text-gray-600">Loading your orders...</div>
