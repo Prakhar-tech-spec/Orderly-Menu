@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, orderBy, onSnapshot, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, updateDoc, doc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { firestore } from '../config/firebase';
 import { motion } from 'framer-motion';
 import { FiClock, FiCheckCircle, FiDollarSign, FiAlertCircle, FiCreditCard } from 'react-icons/fi';
-import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import { useUser } from '../context/UserContext';
 
 interface OrderItem {
   id: string;
@@ -21,7 +22,7 @@ interface Order {
   items: OrderItem[];
   tableNumber: string;
   totalAmount: number;
-  status: 'pending' | 'preparing' | 'completed';
+  status: 'pending' | 'preparing' | 'completed' | string;
   paymentStatus: 'paid' | 'unpaid';
   timestamp: any;
   paymentMethod: string;
@@ -35,7 +36,8 @@ const AdminOrders: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('active');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
-  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { userIP } = useUser();  // Use UserContext instead of AuthContext for now
 
   // Payment summary stats
   const [paymentStats, setPaymentStats] = useState({
@@ -48,55 +50,72 @@ const AdminOrders: React.FC = () => {
 
   // Set up real-time listener for orders
   useEffect(() => {
-    if (!user) {
-      console.log('No user logged in');
-      setLoading(false);
-      return;
-    }
-
     console.log('Setting up real-time listener for orders...');
     
     const ordersRef = collection(firestore, 'orders');
     const q = query(ordersRef, orderBy('timestamp', 'desc'));
     
-    const unsubscribe = onSnapshot(q, 
-      (snapshot) => {
-        console.log('Received snapshot with', snapshot.size, 'orders');
-        const ordersData: Order[] = [];
-        snapshot.forEach((doc) => {
-          const data = doc.data();
-          console.log('Processing order:', doc.id, data);
+    try {
+      const unsubscribe = onSnapshot(q, 
+        (snapshot) => {
+          console.log('Received snapshot with', snapshot.size, 'orders');
+          const ordersData: Order[] = [];
           
-          ordersData.push({
-            id: doc.id,
-            items: data.items || [],
-            tableNumber: data.tableNumber || 'Unknown',
-            totalAmount: data.totalAmount || 0,
-            status: data.status || 'pending',
-            paymentStatus: data.paymentStatus || 'unpaid',
-            timestamp: data.timestamp,
-            paymentMethod: data.paymentMethod || 'Cash',
-            userId: data.userId || ''
+          if (snapshot.empty) {
+            console.log('No orders found in the database');
+            setOrders([]);
+            setLoading(false);
+            return;
+          }
+          
+          snapshot.forEach((doc) => {
+            const data = doc.data();
+            console.log('Processing order:', doc.id, data);
+            
+            // Ensure items array is not undefined and properly formatted
+            const items = Array.isArray(data.items) ? data.items : [];
+            console.log('Order items:', items.length);
+            
+            try {
+              ordersData.push({
+                id: doc.id,
+                items: items,
+                tableNumber: data.tableNumber || 'Unknown',
+                totalAmount: data.totalAmount || 0,
+                status: data.status || 'pending',
+                paymentStatus: data.paymentStatus || 'unpaid',
+                timestamp: data.timestamp || Timestamp.now(),
+                paymentMethod: data.paymentMethod || 'Cash',
+                userId: data.userId || ''
+              });
+            } catch (err) {
+              console.error('Error processing order:', doc.id, err);
+            }
           });
-        });
-        console.log('Setting orders state with', ordersData.length, 'orders');
-        setOrders(ordersData);
-        updatePaymentStats(ordersData);
-        setLoading(false);
-        setError('');
-      },
-      (error) => {
-        console.error('Error in real-time listener:', error);
-        setError('Failed to load orders. Please try refreshing the page.');
-        setLoading(false);
-      }
-    );
-
-    return () => {
-      console.log('Cleaning up orders subscription...');
-      unsubscribe();
-    };
-  }, [user]);
+          
+          console.log('Setting orders state with', ordersData.length, 'orders');
+          setOrders(ordersData);
+          updatePaymentStats(ordersData);
+          setLoading(false);
+          setError('');
+        },
+        (error) => {
+          console.error('Error in real-time listener:', error);
+          setError('Failed to load orders. Please try refreshing the page.');
+          setLoading(false);
+        }
+      );
+  
+      return () => {
+        console.log('Cleaning up orders subscription...');
+        unsubscribe();
+      };
+    } catch (err) {
+      console.error('Failed to set up subscription:', err);
+      setError('Failed to connect to the database. Please try refreshing the page.');
+      setLoading(false);
+    }
+  }, []);
 
   // Update payment statistics
   const updatePaymentStats = (orders: Order[]) => {
@@ -133,7 +152,7 @@ const AdminOrders: React.FC = () => {
   };
 
   const updateOrderStatus = async (orderId: string, newStatus: Order['status']) => {
-    if (!user) return;
+    if (!userIP) return;
 
     try {
       console.log('Updating order status:', orderId, 'to', newStatus);
@@ -152,7 +171,7 @@ const AdminOrders: React.FC = () => {
   };
 
   const updatePaymentStatus = async (orderId: string, newStatus: Order['paymentStatus']) => {
-    if (!user) return;
+    if (!userIP) return;
 
     try {
       console.log('Updating payment status:', orderId, 'to', newStatus);
@@ -162,7 +181,7 @@ const AdminOrders: React.FC = () => {
       const orderToUpdate = orders.find(o => o.id === orderId);
       
       // If the order is being marked as paid, also ensure it's marked as completed
-      if (newStatus === 'paid' && orderToUpdate && orderToUpdate.status !== 'completed') {
+      if (newStatus === 'paid' && orderToUpdate && (orderToUpdate.status as string) !== 'completed') {
         console.log('Also marking order as completed');
         await updateDoc(orderRef, {
           paymentStatus: newStatus,
@@ -227,9 +246,9 @@ const AdminOrders: React.FC = () => {
       // Show all orders that are not paid
       return order.paymentStatus !== 'paid';
     } else if (activeTab === 'completed') {
-      return order.status === 'completed' && order.paymentStatus === 'paid';
+      return (order.status as string) === 'completed' && order.paymentStatus === 'paid';
     } else if (activeTab === 'unpaidCompleted') {
-      return order.status === 'completed' && order.paymentStatus === 'unpaid';
+      return (order.status as string) === 'completed' && order.paymentStatus === 'unpaid';
     }
     return true;
   });
@@ -386,43 +405,60 @@ const AdminOrders: React.FC = () => {
                     Payment: {order.paymentMethod}
                   </div>
 
-                  {/* Admin Action Buttons */}
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {/* First row: Order status buttons */}
-                    <div className="flex w-full gap-2 mb-2">
-                      <button
-                        onClick={() => updateOrderStatus(order.id, 'preparing')}
-                        className={`flex-1 py-2 px-4 rounded-full font-medium transition-colors ${
-                          order.status === 'preparing'
-                            ? 'bg-[#FE4A12] text-white'
-                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                        }`}
-                        disabled={order.paymentStatus === 'paid'}
-                      >
-                        Preparing
-                      </button>
-                      <button
-                        onClick={() => updateOrderStatus(order.id, 'completed')}
-                        className={`flex-1 py-2 px-4 rounded-full font-medium transition-colors ${
-                          order.status === 'completed'
-                            ? 'bg-[#FE4A12] text-white'
-                            : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                        }`}
-                        disabled={order.paymentStatus === 'paid'}
-                      >
-                        Completed
-                      </button>
+                  {/* Notice for completed but unpaid orders */}
+                  {(order.status as string) === 'completed' && order.paymentStatus === 'unpaid' && (
+                    <div className="mt-2 p-2 bg-yellow-50 text-yellow-800 rounded-lg text-sm">
+                      <strong>Note:</strong> This order is completed but not yet paid. Please collect payment.
                     </div>
-                    
-                    {/* Standalone Paid button - Always visible */}
-                    <button
-                      onClick={() => updatePaymentStatus(order.id, 'paid')}
-                      className="w-full py-3 px-4 rounded-full font-medium bg-green-500 text-white hover:bg-green-600 transition-colors flex items-center justify-center gap-2"
-                      disabled={order.paymentStatus === 'paid'}
-                    >
-                      <FiDollarSign className="w-5 h-5" />
-                      {order.paymentStatus === 'paid' ? 'Paid' : 'Mark as Paid'}
-                    </button>
+                  )}
+
+                  {/* Admin Action Buttons */}
+                  <div className="mt-4 flex gap-2">
+                    {(order.status as string) === 'completed' ? (
+                      <button
+                        onClick={() => updatePaymentStatus(order.id, 'paid')}
+                        className="w-full py-2 px-4 rounded-full font-medium transition-colors bg-[#FE4A12] text-white"
+                        disabled={order.paymentStatus === 'paid'}
+                      >
+                        Mark as Paid (Order Completed)
+                      </button>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => updateOrderStatus(order.id, 'preparing')}
+                          className={`flex-1 py-2 px-4 rounded-full font-medium transition-colors ${
+                            order.status === 'preparing'
+                              ? 'bg-[#FE4A12] text-white'
+                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
+                          disabled={order.paymentStatus === 'paid'}
+                        >
+                          Preparing
+                        </button>
+                        <button
+                          onClick={() => updateOrderStatus(order.id, 'completed')}
+                          className={`flex-1 py-2 px-4 rounded-full font-medium transition-colors ${
+                            (order.status as string) === 'completed'
+                              ? 'bg-[#FE4A12] text-white'
+                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
+                          disabled={order.paymentStatus === 'paid'}
+                        >
+                          Completed
+                        </button>
+                        <button
+                          onClick={() => updatePaymentStatus(order.id, 'paid')}
+                          className={`flex-1 py-2 px-4 rounded-full font-medium transition-colors ${
+                            order.paymentStatus === 'paid'
+                              ? 'bg-green-500 text-white'
+                              : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                          }`}
+                          disabled={order.paymentStatus === 'paid'}
+                        >
+                          Paid
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               </motion.div>

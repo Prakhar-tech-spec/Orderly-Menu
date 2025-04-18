@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { collection, getDocs, orderBy, query } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, Timestamp } from 'firebase/firestore';
 import { firestore } from '../config/firebase';
 import { motion } from 'framer-motion';
 import { FiClock, FiCheckCircle, FiDollarSign, FiAlertCircle } from 'react-icons/fi';
@@ -53,101 +53,87 @@ const Orders: React.FC = () => {
   };
 
   useEffect(() => {
-    const fetchAllOrders = async () => {
-      try {
-        console.log('Fetching orders...');
-        setLoading(true);
-        
-        // Get user identifiers
-        const userIdentifiers = getUserFingerprint();
-        console.log('User identifiers:', userIdentifiers);
-        
-        if (userIdentifiers.length === 0) {
-          console.error('No user identification available');
-          setError('Unable to identify your device. Please try again later.');
-          setLoading(false);
-          return;
-        }
-        
-        // Fetch all recent orders
-        const ordersRef = collection(firestore, 'orders');
-        const q = query(
-          ordersRef,
-          orderBy('timestamp', 'desc')
-        );
-        
-        const snapshot = await getDocs(q);
-        
-        if (snapshot.empty) {
-          console.log('No orders found');
-          setOrders([]);
-          setLoading(false);
-          return;
-        }
-        
-        console.log('Found orders:', snapshot.size);
-        
-        // Filter orders on the client side 
-        const userOrders: Order[] = [];
-        
-        snapshot.forEach((doc) => {
-          const data = doc.data();
-          let matchesUser = false;
+    // Get user identifiers
+    const userIdentifiers = getUserFingerprint();
+    console.log('User identifiers:', userIdentifiers);
+    
+    if (userIdentifiers.length === 0) {
+      console.error('No user identification available');
+      setError('Unable to identify your device. Please try again later.');
+      setLoading(false);
+      return;
+    }
+    
+    console.log('Setting up real-time listener for orders...');
+    
+    // Set up real-time listener
+    const ordersRef = collection(firestore, 'orders');
+    const q = query(
+      ordersRef,
+      orderBy('timestamp', 'desc')
+    );
+    
+    try {
+      const unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          console.log('Received snapshot with', snapshot.size, 'orders');
           
-          // Check if order matches any of the user identifiers
-          if (deviceId && data.deviceId === deviceId) {
-            matchesUser = true;
-          } else if (tableNumber && data.tableNumber === tableNumber) {
-            matchesUser = true;
-          } else if (userIP && data.userIP === userIP) {
-            matchesUser = true;
-          }
+          // Filter orders on the client side 
+          const userOrders: Order[] = [];
           
-          // Only include orders that match this user
-          if (matchesUser) {
-            userOrders.push({
-              id: doc.id,
-              items: data.items || [],
-              tableNumber: data.tableNumber || 'Unknown',
-              totalAmount: data.totalAmount || 0,
-              status: data.status || 'pending',
-              paymentStatus: data.paymentStatus || 'unpaid',
-              timestamp: data.timestamp,
-              paymentMethod: data.paymentMethod || 'Cash',
-              userIP: data.userIP || '',
-              deviceId: data.deviceId || ''
-            });
-          }
-        });
-        
-        console.log('Filtered orders for this user:', userOrders.length);
-        
-        if (userOrders.length === 0) {
-          console.log('No orders found for this user');
+          snapshot.forEach((doc) => {
+            const data = doc.data();
+            let matchesUser = false;
+            
+            // Check if order matches any of the user identifiers
+            if (deviceId && data.deviceId === deviceId) {
+              matchesUser = true;
+            } else if (tableNumber && data.tableNumber === tableNumber) {
+              matchesUser = true;
+            } else if (userIP && data.userIP === userIP) {
+              matchesUser = true;
+            }
+            
+            // Only include orders that match this user
+            if (matchesUser) {
+              userOrders.push({
+                id: doc.id,
+                items: data.items || [],
+                tableNumber: data.tableNumber || 'Unknown',
+                totalAmount: data.totalAmount || 0,
+                status: data.status || 'pending',
+                paymentStatus: data.paymentStatus || 'unpaid',
+                timestamp: data.timestamp || Timestamp.now(),
+                paymentMethod: data.paymentMethod || 'Cash',
+                userIP: data.userIP || '',
+                deviceId: data.deviceId || ''
+              });
+            }
+          });
+          
+          console.log('Filtered orders for this user:', userOrders.length);
+          
+          setOrders(userOrders);
+          setLoading(false);
+          setError('');
+        },
+        (err) => {
+          console.error('Error in real-time listener:', err);
+          setError('Failed to load orders. Please try refreshing the page.');
+          setLoading(false);
         }
-        
-        setOrders(userOrders);
-        setLoading(false);
-        setError('');
-        
-      } catch (error) {
-        console.error('Error fetching orders:', error);
-        setError('Failed to load orders. Please try refreshing the page.');
-        setLoading(false);
-      }
-    };
-    
-    fetchAllOrders();
-    
-    // Set up a timer to refresh orders every 30 seconds
-    const intervalId = setInterval(() => {
-      console.log('Refreshing orders...');
-      fetchAllOrders();
-    }, 30000);
-    
-    return () => {
-      clearInterval(intervalId);
-    };
+      );
+      
+      return () => {
+        console.log('Cleaning up orders subscription...');
+        unsubscribe();
+      };
+    } catch (err) {
+      console.error('Failed to set up subscription:', err);
+      setError('Failed to connect to the database. Please try refreshing the page.');
+      setLoading(false);
+    }
   }, [tableNumber, deviceId, userIP]);
 
   const getStatusColor = (status: Order['status']) => {

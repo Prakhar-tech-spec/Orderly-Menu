@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { FiTrash2, FiArrowLeft, FiMinus, FiPlus } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../context/CartContext';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, doc, getDoc } from 'firebase/firestore';
 import { firestore } from '../config/firebase';
 import { useUser } from '../context/UserContext';
 import Notification from '../components/ui/Notification';
@@ -90,16 +90,21 @@ const Cart: React.FC = () => {
     setError('');
 
     try {
-      console.log('Preparing order data with items:', items); // Debug log
+      console.log('Items in cart:', items.length);
+      items.forEach((item, index) => {
+        console.log(`Item ${index + 1}:`, item.name, `Quantity: ${item.quantity}`);
+      });
+      
+      const orderItems = items.map(item => ({
+        id: item.id,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        selectedOptions: item.selectedOptions || []
+      }));
       
       const orderData: OrderData = {
-        items: items.map(item => ({
-          id: item.id,
-          name: item.name,
-          price: item.price,
-          quantity: item.quantity,
-          selectedOptions: item.selectedOptions || []
-        })),
+        items: orderItems,
         tableNumber: inputTableNumber,
         totalAmount: calculateTotal(),
         status: 'pending',
@@ -111,7 +116,7 @@ const Cart: React.FC = () => {
         deviceId: deviceId || 'unknown'
       };
 
-      console.log('Order data prepared:', orderData); // Debug log
+      console.log('Order data prepared with', orderData.items.length, 'items');
 
       // Add to Firebase
       const ordersRef = collection(firestore, 'orders');
@@ -119,6 +124,20 @@ const Cart: React.FC = () => {
       
       const docRef = await addDoc(ordersRef, orderData);
       console.log('Order successfully created with ID:', docRef.id);
+      
+      // Verify the order was created properly by reading it back
+      try {
+        const orderDoc = doc(firestore, 'orders', docRef.id);
+        const getOrderDoc = await getDoc(orderDoc);
+        if (getOrderDoc.exists()) {
+          const savedData = getOrderDoc.data();
+          console.log('Saved order has', savedData.items ? savedData.items.length : 0, 'items');
+        } else {
+          console.error('Order document does not exist after creation');
+        }
+      } catch (verifyErr) {
+        console.error('Error verifying order creation:', verifyErr);
+      }
 
       // Clear cart and show success
       clearCart();
